@@ -10,6 +10,17 @@
             overflow: hidden; 
             background: #0a0a0f;
             font-family: 'Courier New', monospace;
+            transition: transform 0.1s;
+        }
+        body.shake {
+            animation: shake 0.3s ease-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-10px) rotate(-1deg); }
+            40% { transform: translateX(10px) rotate(1deg); }
+            60% { transform: translateX(-5px) rotate(-0.5deg); }
+            80% { transform: translateX(5px) rotate(0.5deg); }
         }
         #ui {
             position: fixed;
@@ -74,6 +85,64 @@
         @keyframes pulse {
             0%, 100% { opacity: 0.7; }
             50% { opacity: 1; }
+        }
+        .trail {
+            position: fixed;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 55;
+            animation: trailFade 0.5s ease-out forwards;
+        }
+        @keyframes trailFade {
+            0% { opacity: 0.6; transform: scale(0.8); }
+            100% { opacity: 0; transform: scale(0.3); }
+        }
+        .particle {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 70;
+        }
+        @keyframes particleExplode {
+            0% { opacity: 1; transform: translate(0, 0) scale(1); }
+            100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0); }
+        }
+        #beat-bg {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(0,255,136,0.05) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+            transition: opacity 0.1s;
+        }
+        #hit-line.pulse {
+            animation: hitPulse 0.15s ease-out;
+        }
+        @keyframes hitPulse {
+            0% { transform: translateX(-50%) scale(1.3); box-shadow: 0 0 40px #00ff88; }
+            100% { transform: translateX(-50%) scale(1); box-shadow: 0 0 20px #00ff88; }
+        }
+        .combo-burst {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 60px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 30px #ffd700;
+            pointer-events: none;
+            z-index: 200;
+            animation: comboBurst 0.8s ease-out forwards;
+        }
+        @keyframes comboBurst {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+            50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
         }
         #lanes {
             position: fixed;
@@ -188,6 +257,7 @@
     </style>
 </head>
 <body>
+    <div id="beat-bg"></div>
     <div id="ui">
         <div id="score">SCORE: 0</div>
         <div id="lives">❤️❤️❤️❤️❤️</div>
@@ -297,7 +367,7 @@
         
         // Notes falling
         const notesEl = [];
-        const noteSpeed = 400; // pixels per second
+        let noteSpeed = 400; // pixels per second - increases with score
         
         function spawnNote(laneIndex) {
             const note = document.createElement('div');
@@ -321,7 +391,72 @@
             `;
             note.textContent = currentTopics[laneIndex]?.emoji || '♪';
             document.body.appendChild(note);
-            notesEl.push({ el: note, y: -50, lane: laneIndex, time: Date.now() });
+            notesEl.push({ el: note, y: -50, lane: laneIndex, time: Date.now(), lastTrailY: -50 });
+        }
+
+        // Particle explosion on hit
+        function createParticles(x, y, color) {
+            const count = 15;
+            for (let i = 0; i < count; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                const angle = (Math.PI * 2 / count) * i + Math.random() * 0.5;
+                const distance = 50 + Math.random() * 80;
+                const tx = Math.cos(angle) * distance;
+                const ty = Math.sin(angle) * distance;
+                particle.style.cssText = `
+                    left: ${x}px;
+                    top: ${y}px;
+                    background: ${color};
+                    box-shadow: 0 0 10px ${color};
+                    --tx: ${tx}px;
+                    --ty: ${ty}px;
+                    animation: particleExplode 0.5s ease-out forwards;
+                `;
+                document.body.appendChild(particle);
+                setTimeout(() => particle.remove(), 500);
+            }
+        }
+
+        // Lane trail effect
+        function createTrail(note) {
+            const trail = document.createElement('div');
+            trail.className = 'trail';
+            const laneX = 50 + (note.lane - 1.5) * 100;
+            const color = currentTopics[note.lane]?.color || '#00ff88';
+            trail.style.cssText = `
+                left: calc(50% + ${(note.lane - 1.5) * 100}px);
+                top: ${note.y}px;
+                transform: translateX(-50%);
+                background: ${color};
+                opacity: 0.4;
+            `;
+            document.body.appendChild(trail);
+            setTimeout(() => trail.remove(), 500);
+        }
+
+        // Screen shake
+        function screenShake() {
+            document.body.classList.add('shake');
+            setTimeout(() => document.body.classList.remove('shake'), 300);
+        }
+
+        // Beat visualization
+        function beatPulse() {
+            const bg = document.getElementById('beat-bg');
+            bg.style.opacity = '1';
+            setTimeout(() => bg.style.opacity = '0.3', 100);
+        }
+
+        // Combo milestone burst
+        function comboBurst(combo) {
+            if (combo > 0 && combo % 25 === 0) {
+                const burst = document.createElement('div');
+                burst.className = 'combo-burst';
+                burst.textContent = `${combo}x COMBO!`;
+                document.body.appendChild(burst);
+                setTimeout(() => burst.remove(), 800);
+            }
         }
 
         // Input handling
@@ -398,6 +533,21 @@
                             hitSynth.triggerAttackRelease('C2', '16n');
                         }
                         
+                        // Particles
+                        const noteX = window.innerWidth / 2 + (laneIndex - 1.5) * 100;
+                        const noteY = window.innerHeight - 280;
+                        createParticles(noteX, noteY, feedbackColor);
+                        
+                        // Beat pulse
+                        beatPulse();
+                        
+                        // Hit line pulse
+                        document.getElementById('hit-line').classList.add('pulse');
+                        setTimeout(() => document.getElementById('hit-line').classList.remove('pulse'), 150);
+                        
+                        // Combo burst
+                        comboBurst(combo);
+                        
                         setTimeout(() => note.el.remove(), 200);
                         notesEl.splice(i, 1);
                         break;
@@ -466,10 +616,15 @@
         function gameLoop(timestamp) {
             if (!gameRunning) return;
             
+            // Difficulty scaling - increase speed with score
+            noteSpeed = 400 + Math.min(score / 50, 300); // Caps at 700
+            
             const delta = timestamp - lastSpawn;
             
-            // Spawn notes
-            if (delta > spawnInterval) {
+            // Spawn notes - spawn faster as score increases
+            const currentSpawnInterval = Math.max(200, 800 - score / 20);
+            
+            if (delta > currentSpawnInterval) {
                 const lane = Math.floor(Math.random() * 4);
                 spawnNote(lane);
                 lastSpawn = timestamp;
@@ -484,6 +639,12 @@
                 note.y += (noteSpeed / 60) * 1.5;
                 note.el.style.top = `${note.y}px`;
                 
+                // Create trail every 30px
+                if (!note.lastTrailY || note.y - note.lastTrailY > 30) {
+                    createTrail(note);
+                    note.lastTrailY = note.y;
+                }
+                
                 // Missed note
                 if (note.y > hitY + 100) {
                     note.el.remove();
@@ -491,6 +652,8 @@
                     lives--;
                     combo = 0;
                     showFeedback('MISS', '#ff0066');
+                    screenShake();
+                    beatPulse();
                     updateUI();
                     
                     if (lives <= 0) {
