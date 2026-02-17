@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reddit Trending Rally</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            overflow: hidden; 
+            background: #1a1a2e;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        #score {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: #ff4500;
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+        #combo {
+            position: fixed;
+            top: 60px;
+            left: 20px;
+            color: #ffd700;
+            font-size: 18px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 100;
+        }
+        #game-over {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            color: white;
+            display: none;
+            z-index: 200;
+        }
+        #game-over h2 { color: #ff4500; margin-bottom: 20px; }
+        #game-over button {
+            background: #ff4500;
+            border: none;
+            padding: 15px 40px;
+            color: white;
+            font-size: 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        #game-over button:hover { background: #ff6a33; }
+        #instructions {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.6);
+            font-size: 14px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="score">⬆ 0</div>
+    <div id="combo">COMBO x1</div>
+    <div id="game-over">
+        <h2>Game Over!</h2>
+        <p id="final-score">Score: 0</p>
+        <p id="best-score">Best: 0</p>
+        <button onclick="restart()">Play Again</button>
+    </div>
+    <div id="instructions">← → or A/D to move • Collect posts • Avoid downvotes</div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // Game state
+        let score = 0;
+        let bestScore = parseInt(localStorage.getItem('redditRallyBest') || '0');
+        let combo = 1;
+        let comboTimer = 0;
+        let gameOver = false;
+        let speed = 0.3;
+        let lane = 0;
+        let targetLane = 0;
+
+        // Trending topics from Reddit
+        const trendingTopics = [
+            { text: "📜 Congress vs Pardons", color: 0x3498db, type: 'up' },
+            { text: "👏 Made Me Smile", color: 0xe74c3c, type: 'up' },
+            { text: "💍 Did you buy a ring?", color: 0x9b59b6, type: 'up' },
+            { text: "🏀 Michael Jordan", color: 0xe67e22, type: 'up' },
+            { text: "🧠 AI Study", color: 0x1abc9c, type: 'up' },
+            { text: "🔧 Origami Engineering", color: 0x2ecc71, type: 'up' },
+            { text: "📺 Show HN", color: 0x34495e, type: 'up' },
+            { text: "⬇️ Downvote!", color: 0x636e72, type: 'down' }
+        ];
+
+        // Three.js setup
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x1a1a2e, 10, 50);
+        
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 5, 10);
+        camera.lookAt(0, 0, -5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x1a1a2e);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xff4500, 0.8);
+        dirLight.position.set(5, 10, 5);
+        scene.add(dirLight);
+
+        // Road
+        const roadGeo = new THREE.PlaneGeometry(8, 100);
+        const roadMat = new THREE.MeshStandardMaterial({ 
+            color: 0x2d2d44,
+            roughness: 0.8
+        });
+        const road = new THREE.Mesh(roadGeo, roadMat);
+        road.rotation.x = -Math.PI / 2;
+        road.position.z = -40;
+        scene.add(road);
+
+        // Lane markers
+        for (let i = -3; i < 20; i++) {
+            const markerGeo = new THREE.PlaneGeometry(0.1, 2);
+            const markerMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+            const marker = new THREE.Mesh(markerGeo, markerMat);
+            marker.rotation.x = -Math.PI / 2;
+            marker.position.set(0, 0.01, -i * 5);
+            scene.add(marker);
+        }
+
+        // Road edges
+        const edgeGeo = new THREE.BoxGeometry(0.3, 0.5, 100);
+        const edgeMat = new THREE.MeshStandardMaterial({ color: 0xff4500 });
+        
+        const leftEdge = new THREE.Mesh(edgeGeo, edgeMat);
+        leftEdge.position.set(-4.15, 0.25, -40);
+        scene.add(leftEdge);
+        
+        const rightEdge = new THREE.Mesh(edgeGeo, edgeMat);
+        rightEdge.position.set(4.15, 0.25, -40);
+        scene.add(rightEdge);
+
+        // Player car (reddit alien)
+        const playerGroup = new THREE.Group();
+        
+        // Body
+        const bodyGeo = new THREE.SphereGeometry(0.5, 16, 16);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff4500 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.scale.set(1, 0.8, 1.2);
+        playerGroup.add(body);
+        
+        // Eyes
+        const eyeGeo = new THREE.SphereGeometry(0.12, 8, 8);
+        const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+        eyeL.position.set(-0.18, 0.15, 0.35);
+        playerGroup.add(eyeL);
+        const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+        eyeR.position.set(0.18, 0.15, 0.35);
+        playerGroup.add(eyeR);
+        
+        // Pupils
+        const pupilGeo = new THREE.SphereGeometry(0.06, 8, 8);
+        const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const pupilL = new THREE.Mesh(pupilGeo, pupilMat);
+        pupilL.position.set(-0.18, 0.15, 0.45);
+        playerGroup.add(pupilL);
+        const pupilR = new THREE.Mesh(pupilGeo, pupilMat);
+        pupilR.position.set(0.18, 0.15, 0.45);
+        playerGroup.add(pupilR);
+        
+        playerGroup.position.y = 0.5;
+        scene.add(playerGroup);
+
+        // Items array
+        const items = [];
+        const itemSpeed = 0.5;
+
+        function createItem() {
+            const topic = trendingTopics[Math.floor(Math.random() * trendingTopics.length)];
+            const lanePos = (Math.random() - 0.5) * 6;
+            
+            const group = new THREE.Group();
+            
+            // Glowing base
+            const baseGeo = new THREE.CylinderGeometry(0.4, 0.5, 0.2, 16);
+            const baseMat = new THREE.MeshStandardMaterial({ 
+                color: topic.color,
+                emissive: topic.color,
+                emissiveIntensity: 0.5
+            });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            group.add(base);
+            
+            // Upvote/Downvote indicator
+            const indicatorGeo = topic.type === 'up' 
+                ? new THREE.ConeGeometry(0.15, 0.3, 8)
+                : new THREE.ConeGeometry(0.15, 0.3, 8);
+            const indicatorMat = new THREE.MeshStandardMaterial({ 
+                color: topic.type === 'up' ? 0x00ff00 : 0xff0000 
+            });
+            const indicator = new THREE.Mesh(indicatorGeo, indicatorMat);
+            indicator.position.y = 0.25;
+            if (topic.type === 'down') indicator.rotation.x = Math.PI;
+            group.add(indicator);
+            
+            group.position.set(lanePos, 0.5, -50);
+            group.userData = { type: topic.type, text: topic.text };
+            scene.add(group);
+            items.push(group);
+        }
+
+        // Particles for collection effect
+        const particles = [];
+        
+        function createParticles(pos, color) {
+            for (let i = 0; i < 10; i++) {
+                const geo = new THREE.SphereGeometry(0.08, 4, 4);
+                const mat = new THREE.MeshBasicMaterial({ color: color });
+                const particle = new THREE.Mesh(geo, mat);
+                particle.position.copy(pos);
+                particle.userData = {
+                    vel: new THREE.Vector3(
+                        (Math.random() - 0.5) * 0.3,
+                        Math.random() * 0.3,
+                        (Math.random() - 0.5) * 0.3
+                    ),
+                    life: 1.0
+                };
+                scene.add(particle);
+                particles.push(particle);
+            }
+        }
+
+        // Input handling
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                targetLane = Math.max(targetLane - 1.5, -3);
+            }
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                targetLane = Math.min(targetLane + 1.5, 3);
+            }
+        });
+        window.addEventListener('keyup', (e) => keys[e.key] = false);
+
+        // UI updates
+        const scoreEl = document.getElementById('score');
+        const comboEl = document.getElementById('combo');
+        
+        function updateScore(points) {
+            score += points * combo;
+            scoreEl.textContent = `⬆ ${score}`;
+            scoreEl.style.transform = 'scale(1.2)';
+            setTimeout(() => scoreEl.style.transform = 'scale(1)', 100);
+            
+            comboTimer = 120;
+            combo = Math.min(combo + 1, 10);
+            comboEl.textContent = `COMBO x${combo}`;
+            comboEl.style.opacity = '1';
+        }
+
+        function gameOver_() {
+            gameOver = true;
+            document.getElementById('game-over').style.display = 'block';
+            document.getElementById('final-score').textContent = `Score: ${score}`;
+            
+            if (score > bestScore) {
+                bestScore = score;
+                localStorage.setItem('redditRallyBest', bestScore.toString());
+            }
+            document.getElementById('best-score').textContent = `Best: ${bestScore}`;
+        }
+
+        window.restart = function() {
+            score = 0;
+            combo = 1;
+            speed = 0.3;
+            targetLane = 0;
+            lane = 0;
+            gameOver = false;
+            scoreEl.textContent = '⬆ 0';
+            comboEl.style.opacity = '0';
+            document.getElementById('game-over').style.display = 'none';
+            
+            items.forEach(item => scene.remove(item));
+            items.length = 0;
+        };
+
+        // Animation loop
+        let frame = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            frame++;
+            
+            if (gameOver) {
+                renderer.render(scene, camera);
+                return;
+            }
+            
+            // Smooth lane movement
+            lane += (targetLane - lane) * 0.15;
+            playerGroup.position.x = lane;
+            playerGroup.rotation.z = (targetLane - lane) * 0.1;
+            
+            // Bobbing animation
+            playerGroup.position.y = 0.5 + Math.sin(frame * 0.1) * 0.05;
+            
+            // Spawn items
+            if (frame % 40 === 0) {
+                createItem();
+            }
+            
+            // Move items
+            for (let i = items.length - 1; i >= 0; i--) {
+                const item = items[i];
+                item.position.z += itemSpeed + speed * 0.1;
+                item.rotation.y += 0.02;
+                
+                // Check collision
+                const dx = item.position.x - playerGroup.position.x;
+                const dz = item.position.z - playerGroup.position.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                
+                if (dist < 0.8 && Math.abs(dz) < 0.5) {
+                    if (item.userData.type === 'up') {
+                        updateScore(100);
+                        createParticles(item.position, 0x00ff00);
+                    } else {
+                        gameOver_();
+                    }
+                    scene.remove(item);
+                    items.splice(i, 1);
+                    continue;
+                }
+                
+                // Remove if past camera
+                if (item.position.z > 10) {
+                    scene.remove(item);
+                    items.splice(i, 1);
+                }
+            }
+            
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.position.add(p.userData.vel);
+                p.userData.vel.y -= 0.01;
+                p.userData.life -= 0.02;
+                p.scale.setScalar(p.userData.life);
+                
+                if (p.userData.life <= 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                }
+            }
+            
+            // Combo decay
+            if (comboTimer > 0) {
+                comboTimer--;
+            } else {
+                combo = 1;
+                comboEl.style.opacity = '0';
+            }
+            
+            // Increase speed over time
+            speed = 0.3 + score * 0.0001;
+            
+            renderer.render(scene, camera);
+        }
+
+        // Handle resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
