@@ -1,6 +1,6 @@
 # Trending Rhythms 🎵
 
-A rhythm-based game built with Three.js and Tone.js, featuring current Reddit trending topics as beat elements.
+A rhythm-based game built with Tone.js, featuring trending topics as beat elements.
 
 ## Play
 
@@ -8,18 +8,18 @@ A rhythm-based game built with Three.js and Tone.js, featuring current Reddit tr
 
 ## How to Play
 
-- Press **A**, **S**, **D**, **F** when the trending topics reach the hit line
+- Press **A**, **S**, **D**, **F** when the topics reach the hit line
 - Time your presses for Perfect/Great/Good hits
 - Build combos for score multipliers
-- Avoid missing notes!
+- You have 5 lives - miss a note and lose one!
+- Don't press keys when no note is nearby (no penalty, just a quiet tone)
 
 ## Topics
 
-The game dynamically features real trending topics from Reddit's popular page, including news about politics, sports, technology, and viral content.
+The game features popular discussion topics. Topics are displayed as colorful notes that fall toward the hit line.
 
 ## Tech
 
-- **Three.js** - 3D rendering
 - **Tone.js** - Web Audio synthesis
 - Vanilla JavaScript (no build step)
 

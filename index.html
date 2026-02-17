@@ -43,6 +43,10 @@
             color: #00ff88;
             text-shadow: 0 0 20px #00ff88;
         }
+        #lives {
+            font-size: 24px;
+            letter-spacing: 5px;
+        }
         #combo {
             color: #ff00aa;
             text-shadow: 0 0 20px #ff00aa;
@@ -186,6 +190,7 @@
 <body>
     <div id="ui">
         <div id="score">SCORE: 0</div>
+        <div id="lives">❤️❤️❤️❤️❤️</div>
         <div id="combo">COMBO x1</div>
     </div>
     <div id="topic-bar"></div>
@@ -197,7 +202,7 @@
         <div class="lane" data-key="F"><span class="lane-key">F</span></div>
     </div>
     <div id="feedback">PERFECT!</div>
-    <a id="github-link" href="https://github.com/nishivector/reddit-rally" target="_blank">View Source</a>
+    <a id="github-link" href="https://github.com/nishivector/reddit-rhythm" target="_blank">View Source</a>
     
     <div id="start-screen">
         <h1>🎵 TRENDING RHYTHMS</h1>
@@ -222,6 +227,9 @@
         let maxCombo = 0;
         let gameRunning = false;
         let bpm = 120;
+        let lives = 5;
+        let countdown = 3;
+        let countdownRunning = false;
         
         // Trending topics
         const trendingTopics = [
@@ -397,9 +405,20 @@
                 }
             }
             
+            // Only show MISS if there was a note in the window but we missed it
+            // Don't penalize for pressing when no note is nearby
             if (!hit) {
-                combo = 0;
-                showFeedback('MISS', '#ff0066');
+                const hasNearbyNote = notesEl.some(note => 
+                    note.lane === laneIndex && 
+                    note.el.dataset.active === 'true' &&
+                    Math.abs(note.y - hitY) < hitWindow * 1.5
+                );
+                if (!hasNearbyNote) {
+                    // No penalty for pressing with no note - just play a quiet tone
+                    if (synths[laneIndex]) {
+                        synths[laneIndex].triggerAttackRelease(notes[laneIndex], '32n', Tone.now(), 0.1);
+                    }
+                }
             }
             
             updateUI();
@@ -420,12 +439,24 @@
 
         function updateUI() {
             scoreEl.textContent = `SCORE: ${Math.floor(score)}`;
+            
+            // Update lives display
+            const hearts = '❤️'.repeat(lives) + '🖤'.repeat(5 - lives);
+            document.getElementById('lives').textContent = hearts;
+            
             if (combo > 1) {
                 comboEl.textContent = `COMBO x${combo}`;
                 comboEl.style.opacity = '1';
             } else {
                 comboEl.style.opacity = '0';
             }
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            document.getElementById('game-over').style.display = 'flex';
+            document.getElementById('final-score').textContent = `Score: ${Math.floor(score)}`;
+            document.getElementById('max-combo').textContent = `Max Combo: ${maxCombo}`;
         }
 
         // Game loop
@@ -457,9 +488,15 @@
                 if (note.y > hitY + 100) {
                     note.el.remove();
                     notesEl.splice(i, 1);
+                    lives--;
                     combo = 0;
                     showFeedback('MISS', '#ff0066');
                     updateUI();
+                    
+                    if (lives <= 0) {
+                        gameOver();
+                        return;
+                    }
                 }
             }
             
@@ -468,27 +505,83 @@
 
         function startGame() {
             document.getElementById('start-screen').style.display = 'none';
-            gameRunning = true;
+            lives = 5;
             score = 0;
             combo = 0;
             maxCombo = 0;
-            updateTopicBar();
+            countdown = 3;
             updateUI();
-            lastSpawn = performance.now();
-            requestAnimationFrame(gameLoop);
+            updateTopicBar();
+            
+            // Countdown
+            countdownRunning = true;
+            const countdownEl = document.createElement('div');
+            countdownEl.id = 'countdown';
+            countdownEl.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 120px;
+                color: #00ff88;
+                text-shadow: 0 0 50px #00ff88;
+                z-index: 150;
+            `;
+            document.body.appendChild(countdownEl);
+            
+            const countdownInterval = setInterval(() => {
+                countdownEl.textContent = countdown;
+                countdown--;
+                if (countdown < 0) {
+                    clearInterval(countdownInterval);
+                    countdownEl.remove();
+                    countdownRunning = false;
+                    gameRunning = true;
+                    lastSpawn = performance.now();
+                    requestAnimationFrame(gameLoop);
+                }
+            }, 800);
         }
 
         function restart() {
             document.getElementById('game-over').style.display = 'none';
             notesEl.forEach(n => n.el.remove());
             notesEl.length = 0;
-            gameRunning = true;
+            lives = 5;
             score = 0;
             combo = 0;
-            updateTopicBar();
+            countdown = 3;
             updateUI();
-            lastSpawn = performance.now();
-            requestAnimationFrame(gameLoop);
+            updateTopicBar();
+            
+            // Countdown
+            countdownRunning = true;
+            const countdownEl = document.createElement('div');
+            countdownEl.id = 'countdown';
+            countdownEl.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 120px;
+                color: #00ff88;
+                text-shadow: 0 0 50px #00ff88;
+                z-index: 150;
+            `;
+            document.body.appendChild(countdownEl);
+            
+            const countdownInterval = setInterval(() => {
+                countdownEl.textContent = countdown;
+                countdown--;
+                if (countdown < 0) {
+                    clearInterval(countdownInterval);
+                    countdownEl.remove();
+                    countdownRunning = false;
+                    gameRunning = true;
+                    lastSpawn = performance.now();
+                    requestAnimationFrame(gameLoop);
+                }
+            }, 800);
         }
 
         // Start button
