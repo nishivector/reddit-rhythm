@@ -19,8 +19,24 @@
             padding: 20px 30px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
             z-index: 100;
             background: linear-gradient(to bottom, rgba(10,10,15,0.9), transparent);
+        }
+        #github-link {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            color: #666;
+            font-size: 14px;
+            text-decoration: none;
+            z-index: 100;
+            opacity: 0.6;
+            transition: opacity 0.3s;
+        }
+        #github-link:hover {
+            opacity: 1;
+            color: #fff;
         }
         #score, #combo {
             font-size: 24px;
@@ -181,6 +197,7 @@
         <div class="lane" data-key="F"><span class="lane-key">F</span></div>
     </div>
     <div id="feedback">PERFECT!</div>
+    <a id="github-link" href="https://github.com/nishivector/reddit-rally" target="_blank">View Source</a>
     
     <div id="start-screen">
         <h1>🎵 TRENDING RHYTHMS</h1>
